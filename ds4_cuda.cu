@@ -1847,7 +1847,10 @@ static double cuda_wall_sec(void) {
 
 static int cuda_model_load_progress_enabled(void) {
     if (getenv("DS4_CUDA_WEIGHT_CACHE_VERBOSE") != NULL) return 0;
-    return 1;
+    /* Lazy uploads also happen during token generation. A carriage-return
+     * progress line would overwrite/interleave the user's streamed answer. */
+    const char *progress = getenv("DS4_CUDA_MODEL_LOAD_PROGRESS");
+    return progress && strcmp(progress, "1") == 0;
 }
 
 static void cuda_model_load_progress_reset(void) {

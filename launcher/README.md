@@ -8,11 +8,21 @@ Il modello, Ubuntu, CUDA e il binario Linux non sono incorporati nell'exe. La co
 
 Scegli **Solo questo PC - chat locale**, poi **Verifica** e **Avvia**. Non servono IP, secondo computer, rete mirrored o regole firewall. La GPU viene scelta dal motore CUDA locale; il campo GPU del launcher serve solo a ripartire i livelli nella modalita distribuita. Restano necessari WSL, CUDA, binario e GGUF. Termina prima eventuali processi DS4 precedenti.
 
+## Arresto
+
+**Stop**, accanto ad Avvia, termina la distribuzione Ubuntu locale usata dalla sessione (`wsl --terminate NOME`). Ferma quindi modello, collegamento DS4 e tutti gli altri processi di quella distribuzione, inclusi eventuali trasferimenti: termina la risposta in corso senza salvarla. Chiude anche la console aperta da questa istanza del launcher. Se non rimangono distribuzioni attive, esegue `wsl --shutdown` e verifica che VmmemWSL scompaia. Se un'altra distribuzione e attiva, la preserva e segnala che VmmemWSL resta necessario. Il computer remoto resta acceso: premi Stop anche li per liberarne la memoria.
+
+L'opzione **Chiudi Ubuntu all'uscita** e attiva per default e viene salvata. La X arresta Ubuntu solo dopo la chiusura della console modello e se i controlli non rilevano processi DS4, terminali Linux, compilazioni, trasferimenti comuni o servizi TCP in ascolto. Se li rileva, avvisa e lascia Ubuntu acceso; questi controlli non sono un inventario di ogni possibile lavoro in background. Se vuoi l'arresto esplicito usa Stop. Chiudere un launcher dopo Stop non riavvia Ubuntu per controllarlo.
+
+Verifica locale: compilazione launcher e motore CUDA passate; self-test avvio singolo/distribuito passato. Eseguita realmente la funzione di arresto WSL del launcher sul PC1: VmmemWSL assente al termine. Il test non copre l'arresto coordinato del PC remoto. I contatori CUDA sono ora opt-in; il motore aggiornato e installato sul PC1 e richiede ricompilazione sul PC2.
+
 ## RAM, VRAM e SSD
 
 **Conserva in RAM i pesi letti** e attivo per default, anche per chi aggiorna una vecchia configurazione. Imposta `DS4_CUDA_NO_DIRECT_IO=1` e `DS4_CUDA_KEEP_MODEL_PAGES=1`: le letture possono beneficiare della cache Linux e il backend non chiede di scartare le pagine dopo la copia alla GPU. Deselezionandolo viene rimossa esplicitamente la seconda variabile, per un confronto con il comportamento precedente.
 
 La cache RAM cresce con le letture, e recuperabile da Linux e condivide il limite WSL con processi e buffer. `memory=24GB` e il limite di tutta la VM, non una riserva di 24 GB per i pesi. Il launcher mostra `free -h` in Verifica; non cambia i limiti WSL. La modifica richiede un nuovo avvio del modello.
+
+I messaggi CUDA `loading model tensors ... GiB` sono disattivati per default nel motore: i caricamenti tardivi non devono mescolarsi con la risposta. Errori e statistiche finali prefill/generazione restano visibili. Per diagnostica si possono riattivare con `DS4_CUDA_MODEL_LOAD_PROGRESS=1`. Dopo un aggiornamento del codice CUDA, sul secondo PC esegui in Ubuntu `make -j4 ds4 CUDA_ARCH=sm_120` nella cartella del motore, a sessione chiusa; aggiornare solo l'exe Windows non aggiorna il binario Linux.
 
 Non precarica indiscriminatamente gli 81 GiB e non blocca tutta la RAM: i primi accessi richiedono ancora l'SSD. La VRAM resta gestita dal motore, con spazio necessario per contesto e buffer; questa opzione non implementa una cache persistente CUDA degli esperti piu frequenti. Nessuna garanzia di memoria piena o di aumento di token/s. Confrontare lo stesso prompt e contesto, distinguendo prefill e generazione e indicando se la cache era gia calda.
 

@@ -15,11 +15,15 @@ class DS4Launcher : Form {
     TextBox local = new TextBox(), peer = new TextBox(), distro = new TextBox(), user = new TextBox(), folder = new TextBox();
     ComboBox role = new ComboBox(), gpu = new ComboBox();
     CheckBox keepRam = new CheckBox();
+    CheckBox stopUbuntu = new CheckBox();
+    Process modelConsole;
+    bool closingReady, closingCheck, skipShutdown;
     bool busy;
     bool Solo { get { return role.SelectedIndex==2; } }
     Label summary = new Label();
     TextBox log = new TextBox();
-    Button check = new Button(), start = new Button(), firewall = new Button();
+    Button check = new Button(), start = new Button(), firewall = new Button(), stop = new Button();
+    string modelDistribution;
     static string Store = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DS4Launcher");
     string Config { get { return Path.Combine(Store, "settings.xml"); } }
     static string Sh(string s) { return "'" + s.Replace("'", "'\"'\"'") + "'"; }
@@ -34,7 +38,7 @@ class DS4Launcher : Form {
         return a.ToString();
     }
     public DS4Launcher() {
-        Text="DS4 - Chat locale o su due PC"; ClientSize=new Size(730,685); MinimumSize=new Size(746,724);
+        Text="DS4 - Chat locale o su due PC"; ClientSize=new Size(730,720); MinimumSize=new Size(746,759);
         Font=new Font("Segoe UI",10); StartPosition=FormStartPosition.CenterScreen; BackColor=Color.FromArgb(245,247,250);
         var title=new Label {Text="DeepSeek - RAM, GPU e SSD", Font=new Font("Segoe UI",19,FontStyle.Bold),AutoSize=true,Location=new Point(24,16)}; Controls.Add(title);
         Controls.Add(new Label {Text="Scegli la chat su questo PC oppure distribuisci il modello su due PC.",AutoSize=true,Location=new Point(26,58)});
@@ -49,18 +53,89 @@ class DS4Launcher : Form {
         role.SelectedIndex=2; gpu.SelectedIndex=local.Text=="192.168.1.10"?1:0;
         keepRam.Text="Conserva in RAM i pesi letti (cache automatica entro i limiti WSL)";
         keepRam.Checked=true; keepRam.SetBounds(26,390,680,30); Controls.Add(keepRam);
+        stopUbuntu.Text="Chiudi Ubuntu all'uscita, se terminale DS4 e servizi sono chiusi";
+        stopUbuntu.Checked=true; stopUbuntu.SetBounds(26,422,680,30); Controls.Add(stopUbuntu);
         LoadConfig();
-        summary.SetBounds(26,431,680,45); Controls.Add(summary);
-        check.Text="Verifica"; check.SetBounds(26,486,155,38);
-        firewall.Text="Configura rete"; firewall.SetBounds(193,486,190,38);
-        start.Text="Avvia"; start.SetBounds(395,486,150,38);
-        Controls.AddRange(new Control[]{check,firewall,start});
-        log.SetBounds(26,539,678,117); log.Multiline=true; log.ReadOnly=true; log.ScrollBars=ScrollBars.Vertical; log.Anchor=AnchorStyles.Left|AnchorStyles.Right|AnchorStyles.Top|AnchorStyles.Bottom; Controls.Add(log);
+        summary.SetBounds(26,466,680,45); Controls.Add(summary);
+        check.Text="Verifica"; check.SetBounds(26,521,155,38);
+        firewall.Text="Configura rete"; firewall.SetBounds(193,521,190,38);
+        start.Text="Avvia"; start.SetBounds(395,521,150,38);
+        stop.Text="Stop"; stop.SetBounds(557,521,147,38);
+        Controls.AddRange(new Control[]{check,firewall,start,stop});
+        new ToolTip().SetToolTip(stop,"Arresta Ubuntu selezionato e tutti i suoi processi, inclusi modello e trasferimenti. L'altro PC resta acceso.");
+        log.SetBounds(26,574,678,117); log.Multiline=true; log.ReadOnly=true; log.ScrollBars=ScrollBars.Vertical; log.Anchor=AnchorStyles.Left|AnchorStyles.Right|AnchorStyles.Top|AnchorStyles.Bottom; Controls.Add(log);
         role.SelectedIndexChanged+=delegate{Summary();}; gpu.SelectedIndexChanged+=delegate{Summary();}; Summary();
         check.Click+=async delegate { await Check(); };
         start.Click+=async delegate { await StartModel(); };
+        stop.Click+=async delegate { await StopModel(); };
         firewall.Click+=delegate { try { ConfigureNetwork(); } catch(Exception e){Error(e);} };
         log.Text="RAM: cache recuperabile da Linux; cresce con le letture. VRAM: pesi e buffer gestiti da CUDA.\r\nSSD per i pesi mancanti. La cache RAM non e una cache persistente degli esperti in VRAM.";
+        FormClosing+=OnLauncherClosing;
+    }
+    static string TerminateArgs(string target){
+        if(!Regex.IsMatch(target,@"^[A-Za-z0-9_.-]+$"))throw new Exception("Nome distribuzione non valido.");
+        return "--terminate "+target;
+    }
+    static async Task RunWslControl(string args){await Task.Run(()=>{
+        using(var p=Process.Start(new ProcessStartInfo("wsl.exe",args){UseShellExecute=false,CreateNoWindow=true,RedirectStandardError=true})){
+            var error=p.StandardError.ReadToEndAsync();
+            if(!p.WaitForExit(30000)){p.Kill();throw new Exception("Arresto Ubuntu non confermato entro 30 secondi.");}
+            if(p.ExitCode!=0)throw new Exception(error.Result.Replace("\0",""));
+        }
+    });}
+    async Task StopModel(){Busy(true);try{
+        string target=modelDistribution??distro.Text;
+        log.Text="Arresto di "+target+": modello, connessione e processi Ubuntu...";
+        await RunWslControl(TerminateArgs(target));
+        if(modelConsole!=null && !modelConsole.HasExited){modelConsole.Kill();modelConsole.WaitForExit(5000);}
+        modelConsole=null;modelDistribution=null;
+        bool released=await ShutdownIdleWsl();
+        log.Text="Ubuntu "+target+" arrestato. Modello e connessione locale chiusi.\r\n"+(released?"Macchina virtuale WSL arrestata.":"Altre distribuzioni attive: VmmemWSL resta necessario.")+" L'altro PC resta acceso.";
+    }catch(Exception ex){Error(ex);}finally{Busy(false);}}
+    // Read-only guard: never terminate a model, transfer, diagnostic listener,
+    // build or another interactive Ubuntu terminal just to reclaim memory.
+    static string ShutdownGuard(){return @"set -e
+if pgrep -x 'ds4|ds4-server|ds4-agent|ds4-bench|ds4-eval|make|nvcc|cc1plus|rsync|wget|curl' >/dev/null; then echo 'KEEP: modello, compilazione o trasferimento attivo'; exit 0; fi
+if ps -eo tty= | grep -E '^ *(pts/|tty)' >/dev/null; then echo 'KEEP: terminale Ubuntu ancora aperto'; exit 0; fi
+if ss -ltnH | awk '{print $4}' | grep -Ev ':53$' >/dev/null; then echo 'KEEP: servizio in ascolto (possibile trasferimento modello)'; exit 0; fi
+echo SAFE_TO_TERMINATE
+";}
+    static async Task<bool> IsRunning(string target){return await Task.Run(()=>{
+        using(var p=Process.Start(new ProcessStartInfo("wsl.exe","--list --running --quiet"){UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true})){
+            var output=p.StandardOutput.ReadToEndAsync();
+            if(!p.WaitForExit(15000)){p.Kill();throw new Exception("Impossibile verificare lo stato di Ubuntu.");}
+            if(p.ExitCode!=0)throw new Exception("Impossibile elencare le distribuzioni attive.");
+            foreach(string line in output.Result.Replace("\0","").Split('\n'))if(line.Trim().Length>0 && (target==null || line.Trim()==target))return true;
+            return false;
+        }
+    });}
+    static async Task<bool> ShutdownIdleWsl(){
+        if(await IsRunning(null))return false;
+        await RunWslControl("--shutdown");
+        for(int i=0;i<50;i++){
+            if(Process.GetProcessesByName("vmmemWSL").Length==0)return true;
+            await Task.Delay(200);
+        }
+        throw new Exception("Arresto WSL richiesto, ma VmmemWSL risulta ancora presente. Un altro programma potrebbe riavviare WSL.");
+    }
+    async void OnLauncherClosing(object sender,FormClosingEventArgs e){
+        if(closingReady || skipShutdown)return;
+        if(busy || closingCheck){e.Cancel=true;log.AppendText("\r\nAttendi il completamento dell'operazione.");return;}
+        if(!stopUbuntu.Checked)return;
+        e.Cancel=true;closingCheck=true;Busy(true);
+        try{
+            if(modelConsole!=null && !modelConsole.HasExited)throw new Exception("Ubuntu resta acceso: il terminale del modello e ancora aperto.");
+            if(modelDistribution!=null && modelDistribution!=distro.Text)throw new Exception("Distribuzione cambiata dopo l'avvio: Ubuntu resta acceso. Usa Stop per arrestare la sessione avviata.");
+            if(!Regex.IsMatch(distro.Text,@"^[A-Za-z0-9_.-]+$") || (user.Text.Length>0 && !Regex.IsMatch(user.Text,@"^[a-z_][a-z0-9_-]*$")))throw new Exception("Nome distribuzione o utente non valido: Ubuntu non arrestato.");
+            Save();log.Text="Controllo prima dell'arresto di Ubuntu...";
+            if(!await IsRunning(distro.Text)){await ShutdownIdleWsl();return;}
+            string guard=await CaptureWsl(ShutdownGuard());
+            if(guard.Trim()!="SAFE_TO_TERMINATE")throw new Exception("Ubuntu resta acceso. "+guard.Trim());
+            string target=distro.Text;
+            await RunWslControl(TerminateArgs(target));
+            await ShutdownIdleWsl();
+        }catch(Exception ex){MessageBox.Show(this,ex.Message,"Chiusura DS4",MessageBoxButtons.OK,MessageBoxIcon.Information);}
+        finally{closingReady=true;closingCheck=false;Close();}
     }
     void Row(string name,Control c,int y){Controls.Add(new Label{Text=name,Location=new Point(26,y+5),Size=new Size(285,28)});c.SetBounds(319,y,385,31);Controls.Add(c);}
     static string LocalIP(){foreach(var n in NetworkInterface.GetAllNetworkInterfaces()) if(n.OperationalStatus==OperationalStatus.Up && (n.NetworkInterfaceType==NetworkInterfaceType.Wireless80211 || n.NetworkInterfaceType==NetworkInterfaceType.Ethernet)) foreach(var a in n.GetIPProperties().UnicastAddresses) if(a.Address.AddressFamily==AddressFamily.InterNetwork && a.Address.ToString().StartsWith("192.168.")) return a.Address.ToString(); return "";}
@@ -84,7 +159,7 @@ echo ""Rete WSL: $mode""
 "nvidia-smi --query-gpu=name,memory.total,memory.used --format=csv\nfree -h\n"+
 (launching ? "if pgrep -x ds4 >/dev/null || pgrep -x ds4-server >/dev/null; then echo 'ERRORE: DS4 gia attivo. Chiudi prima la sessione precedente.'; exit 1; fi\n"+(Solo?"":"if [ -n \"$(ss -ltnH 'sport = :"+(role.SelectedIndex==0?"9911":"9912")+"')\" ]; then echo 'ERRORE: porta occupata, forse da un listener diagnostico. Fermalo prima di avviare.'; exit 1; fi\n") : "")+"echo VERIFICA_OK\n";}
     async Task<string> CaptureWsl(string script){string args=Args(script);return await Task.Run(()=>{using(var p=new Process()){p.StartInfo=new ProcessStartInfo("wsl.exe",args){UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true,RedirectStandardError=true};p.Start();var output=p.StandardOutput.ReadToEndAsync();var error=p.StandardError.ReadToEndAsync();if(!p.WaitForExit(45000)){p.Kill();throw new Exception("Verifica scaduta: controlla avvio e configurazione di Ubuntu.");}Task.WaitAll(output,error);string text=output.Result+error.Result;if(p.ExitCode!=0)throw new Exception(text);return text;}});}
-    void Busy(bool b){busy=b;check.Enabled=start.Enabled=distro.Enabled=user.Enabled=folder.Enabled=role.Enabled=keepRam.Enabled=!b;Summary();}
+    void Busy(bool b){busy=b;check.Enabled=start.Enabled=stop.Enabled=distro.Enabled=user.Enabled=folder.Enabled=role.Enabled=keepRam.Enabled=stopUbuntu.Enabled=!b;Summary();}
     void Error(Exception e){log.Text=e.Message;MessageBox.Show(this,e.Message,"DS4",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
     async Task Check(){Busy(true);try{ValidateFields();Save();log.Text="Verifica in corso...";log.Text=await CaptureWsl(Preflight(false));}catch(Exception e){Error(e);}finally{Busy(false);}}
     static string Command(bool coordinator,int count,string ip){return "./ds4 --cuda --ssd-streaming --ctx 2048 --prefill-chunk 64 --nothink "+(coordinator?"--role coordinator --layers 0:"+(count-1)+" --listen "+ip+" 9911 -n 256":"--role worker --layers "+count+":output --listen 0.0.0.0 9912 --coordinator "+ip+" 9911");}
@@ -93,9 +168,9 @@ echo ""Rete WSL: $mode""
     async Task StartModel(){Busy(true);try{ValidateFields();Save();log.Text="Controllo prima dell'avvio...";log.Text=await CaptureWsl(Preflight(true));string script=Preflight(true)+MemoryEnvironment()+"echo "+Sh(Solo?"CHAT LOCALE: invia i prompt qui.":role.SelectedIndex==0?"COORDINATORE: invia i prompt qui. Attendi il worker.":"WORKER: solo calcolo, prompt sull'altro PC.")+"\nexec "+ModelCommand()+"\n";
         // A separate console owns stdin; the worker is never exposed as a chat.
         string ps="$Host.UI.RawUI.WindowTitle = "+Ps("DS4 - "+(Solo?"Chat locale":role.SelectedIndex==0?"Coordinatore":"Worker"))+"; $p = New-Object System.Diagnostics.Process; $p.StartInfo = New-Object System.Diagnostics.ProcessStartInfo; $p.StartInfo.FileName = 'wsl.exe'; $p.StartInfo.Arguments = "+Ps(Args(script))+"; $p.StartInfo.UseShellExecute = $false; [void]$p.Start(); $p.WaitForExit(); Write-Host ('DS4 terminato, codice ' + $p.ExitCode); [void](Read-Host 'Invio per chiudere')";
-        LaunchPowerShell(ps,false);log.AppendText("\r\nConsole aperta. Puoi chiudere questo launcher senza fermare DS4.");
+        modelConsole=LaunchPowerShell(ps,false);modelDistribution=distro.Text;log.AppendText("\r\nConsole aperta. Stop arresta modello e Ubuntu, inclusi altri processi nella distribuzione.");
     }catch(Exception e){Error(e);}finally{Busy(false);}}
-    static void LaunchPowerShell(string script,bool admin){var p=new ProcessStartInfo("powershell.exe","-NoProfile -ExecutionPolicy Bypass -EncodedCommand "+Convert.ToBase64String(Encoding.Unicode.GetBytes(script))){UseShellExecute=true};if(admin)p.Verb="runas";Process.Start(p);}
+    static Process LaunchPowerShell(string script,bool admin){var p=new ProcessStartInfo("powershell.exe","-NoProfile -ExecutionPolicy Bypass -EncodedCommand "+Convert.ToBase64String(Encoding.Unicode.GetBytes(script))){UseShellExecute=true};if(admin)p.Verb="runas";return Process.Start(p);}
     void ConfigureNetwork(){ValidateFields();Save();if(MessageBox.Show(this,"Consentire a "+peer.Text+" di collegarsi a questo PC sulle porte TCP 9911 e 9912?\n\nLe regole saranno limitate ai due IP e permetteranno di invertire i ruoli. WSL e il trasferimento del modello non verranno riavviati.","Firewall Windows e WSL",MessageBoxButtons.OKCancel)!=DialogResult.OK)return;
         string script="$ErrorActionPreference='Stop'; try { "+
         "$vm='{40E0AC32-46A5-438A-A0B2-2B479E8F2E90}'; foreach($port in @(9911,9912)) { $name='DS4Launcher-'+$port; "+
@@ -106,8 +181,8 @@ echo ""Rete WSL: $mode""
         "$hvName=$name+'-WSL'; $hvArgs=@{Name=$hvName; Direction='Inbound'; Action='Allow'; VMCreatorId=$vm; Protocol='TCP'; LocalPorts=[string]$port; LocalAddresses="+Ps(local.Text)+"; RemoteAddresses="+Ps(peer.Text)+"}; "+
         "if (Get-NetFirewallHyperVRule -Name $hvName -ErrorAction SilentlyContinue) { Set-NetFirewallHyperVRule @hvArgs -Enabled True } else { New-NetFirewallHyperVRule @hvArgs -DisplayName $hvName | Out-Null }; }; Write-Host 'Regole applicate. Usa Verifica nel launcher.' } catch {Write-Host ($_ | Out-String) -ForegroundColor Red; Write-Host $_.ScriptStackTrace}; [void](Read-Host 'Invio per chiudere')";
         LaunchPowerShell(script,true);log.Text="Richiesta configurazione firewall aperta. Controlla l'esito nella finestra amministrativa. Nessuna modifica alla porta 9913.";}
-    void Save(){Directory.CreateDirectory(Store);new XDocument(new XElement("settings",new XElement("local",local.Text),new XElement("peer",peer.Text),new XElement("distro",distro.Text),new XElement("user",user.Text),new XElement("folder",folder.Text),new XElement("role",role.SelectedIndex),new XElement("gpu",gpu.SelectedIndex),new XElement("keepRam",keepRam.Checked))).Save(Config);}
-    void LoadConfig(){if(!File.Exists(Config))return;try{var x=XDocument.Load(Config).Root;local.Text=(string)x.Element("local");peer.Text=(string)x.Element("peer");distro.Text=(string)x.Element("distro");user.Text=(string)x.Element("user");folder.Text=(string)x.Element("folder");role.SelectedIndex=(int)x.Element("role");gpu.SelectedIndex=(int)x.Element("gpu");keepRam.Checked=(bool?)x.Element("keepRam")??true;}catch{}}
+    void Save(){Directory.CreateDirectory(Store);new XDocument(new XElement("settings",new XElement("local",local.Text),new XElement("peer",peer.Text),new XElement("distro",distro.Text),new XElement("user",user.Text),new XElement("folder",folder.Text),new XElement("role",role.SelectedIndex),new XElement("gpu",gpu.SelectedIndex),new XElement("keepRam",keepRam.Checked),new XElement("stopUbuntu",stopUbuntu.Checked))).Save(Config);}
+    void LoadConfig(){if(!File.Exists(Config))return;try{var x=XDocument.Load(Config).Root;local.Text=(string)x.Element("local");peer.Text=(string)x.Element("peer");distro.Text=(string)x.Element("distro");user.Text=(string)x.Element("user");folder.Text=(string)x.Element("folder");role.SelectedIndex=(int)x.Element("role");gpu.SelectedIndex=(int)x.Element("gpu");keepRam.Checked=(bool?)x.Element("keepRam")??true;stopUbuntu.Checked=(bool?)x.Element("stopUbuntu")??true;}catch{}}
     [STAThread] static int Main(string[] args){
         Application.EnableVisualStyles();Application.SetCompatibleTextRenderingDefault(false);
         if(args.Length>0 && args[0]=="--self-test"){
@@ -115,7 +190,10 @@ echo ""Rete WSL: $mode""
             try{
                 if(!Command(true,24,"192.168.1.12").Contains("--layers 0:23") || !Command(false,24,"192.168.1.12").Contains("--layers 24:output") || !Command(true,19,"192.168.1.10").Contains("--layers 0:18") || !Command(false,19,"192.168.1.10").Contains("--layers 19:output"))throw new Exception("Layer mapping");
                 bool rejected=false;try{IPv4("192.168.1.10;echo x");}catch{rejected=true;}if(!rejected)throw new Exception("IP validation");
+                if(TerminateArgs("Ubuntu-24.04")!="--terminate Ubuntu-24.04")throw new Exception("Stop scope");
+                rejected=false;try{TerminateArgs("Ubuntu;whoami");}catch{rejected=true;}if(!rejected)throw new Exception("Stop validation");
                 using(var f=new DS4Launcher()){
+                    f.skipShutdown=true;
                     f.user.Text="ds4";f.local.Text="192.168.1.12";f.peer.Text="192.168.1.10";f.folder.Text="/home/ds4/ds4";
                     f.role.SelectedIndex=2; f.local.Text=""; f.peer.Text="";
                     f.ValidateFields();
