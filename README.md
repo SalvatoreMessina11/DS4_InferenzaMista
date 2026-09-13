@@ -1,6 +1,6 @@
 # DS4_InferenzaMista
 
-**Avvio Windows senza Codex:** scarica [DS4-Launcher.exe](dist/DS4-Launcher.exe) e aprilo su entrambi i PC per scegliere Coordinatore o Worker. [Guida al launcher](launcher/README.md). WSL, CUDA e modello locale devono essere gia pronti; la pipeline a due PC resta da collaudare.
+**Avvio Windows senza Codex:** scarica [DS4-Launcher.exe](dist/DS4-Launcher.exe) e scegli **Solo questo PC**, Coordinatore o Worker. Cache RAM dei pesi attiva per default, CUDA e SSD streaming in tutte le modalita. [Guida al launcher](launcher/README.md). WSL, CUDA e modello locale devono essere gia pronti; le prestazioni a due PC restano da misurare.
 
 Versione personale di [antirez/ds4](https://github.com/antirez/ds4), con due correzioni locali per DeepSeek V4 Flash Q2 in CUDA SSD streaming.
 I pesi **non sono inclusi**: il modello ufficiale occupa circa 81 GiB e viene scaricato separatamente oppure copiato da un altro PC.

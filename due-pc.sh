@@ -27,6 +27,7 @@ if [[ ! "$coordinator_layers" =~ ^([1-9]|[1-3][0-9]|4[0-2])$ ]]; then
     exit 2
 fi
 export DS4_CUDA_NO_DIRECT_IO=1
+export DS4_CUDA_KEEP_MODEL_PAGES=1
 common=(--cuda --ssd-streaming --ctx 2048 --prefill-chunk 64 --nothink)
 if [[ "$role" == coordinator ]]; then
     command=(./ds4 "${common[@]}" --role coordinator --layers "0:$((coordinator_layers-1))" --listen "$address" 9911 -n 256)
