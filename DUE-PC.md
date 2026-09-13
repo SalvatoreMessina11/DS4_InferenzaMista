@@ -8,7 +8,9 @@ SHA256: ca22ae2f838e14077c22bc1c1417b71b45b5e5a3687bd96c2ac6e17fdb6261c0.
 
 ## Come funziona
 
-Pipeline TCP: PC1 esegue i livelli 0-23, PC2 i livelli 24-42 e la testa di output.
+Entrambi i PC calcolano parti dello stesso modello. Solo il coordinator accetta prompt e mostra le risposte; il worker resta aperto come processo di calcolo, senza una chat indipendente.
+Puoi scegliere quale PC coordina prima di avviare la coppia. La scelta non trasferisce una conversazione gia in corso e non si cambia durante la generazione.
+Pipeline TCP predefinita: PC1 esegue i livelli 0-23, PC2 i livelli 24-42 e la testa di output.
 Questa divisione e un punto di partenza, non un bilanciamento misurato.
 Entrambi usano CUDA e SSD streaming. Le due VRAM non diventano un unico banco da 28 GB.
 La generazione di una singola risposta attraversa entrambi i PC in sequenza: nessun raddoppio di velocita garantito.
@@ -30,7 +32,7 @@ Stesso Wi-Fi domestico, non rete ospiti con isolamento client. Preferibile Ether
 WSL2 normalmente usa NAT: essere sullo stesso Wi-Fi non rende automaticamente raggiungibile il processo Linux.
 Su Windows 11 compatibile, valutare networkingMode=mirrored nella sezione [wsl2] di .wslconfig su entrambi i PC.
 La modifica richiede l'arresto di WSL: farla solo dopo /quit, per non perdere una risposta in corso.
-Consentire TCP 9911 verso PC1 e TCP 9912 verso PC2 nei firewall Windows/Hyper-V, limitando l'accesso all'IP dell'altro PC.
+Consentire TCP 9911 verso il coordinator e TCP 9912 verso il worker nei firewall Windows/Hyper-V, limitando l'accesso all'IP dell'altro PC. Se inverti i ruoli, vanno adeguate anche le regole: quelle gia predisposte per PC1 coordinator non bastano automaticamente per PC2 coordinator.
 Non disabilitare l'intero firewall. Non inoltrare queste porte dal router verso Internet: il protocollo ds4 non ha autenticazione o cifratura.
 Con NAT occorre invece configurare gli inoltri Windows->WSL e verificare anche il collegamento di ritorno al worker. Il percorso mirrored e quello da provare per primo.
 
@@ -39,15 +41,35 @@ Con NAT occorre invece configurare gli inoltri Windows->WSL e verificare anche i
 Chiudere la chat singola con /quit. Stessa versione del codice su entrambi i PC.
 Da Ubuntu nella cartella contenente due-pc.sh:
 
-PC1 (sostituire l'IP di esempio con il suo IPv4 LAN effettivo):
+Puoi eseguire `bash due-pc.sh` senza argomenti per scegliere il ruolo dal menu. Impostare lo stesso numero di livelli coordinator su entrambi i PC.
 
-    bash due-pc.sh coordinator 192.168.1.10
+### Chat sul PC1 (5070 Ti), worker sul PC2 (5070)
+
+PC1, IPv4 LAN verificato 192.168.1.12:
+
+    bash due-pc.sh coordinator 192.168.1.12 24
 
 PC2 (passare l'IP del PC1):
 
-    bash due-pc.sh worker 192.168.1.10
+    bash due-pc.sh worker 192.168.1.12 24
 
-La chat e sul PC1. Non usare curl/nc sulle porte del protocollo mentre ds4 attende il peer.
+### Chat sul PC2 (5070), worker sul PC1 (5070 Ti)
+
+PC2, IPv4 LAN comunicato 192.168.1.10:
+
+    bash due-pc.sh coordinator 192.168.1.10 19
+
+PC1:
+
+    bash due-pc.sh worker 192.168.1.10 19
+
+In questo caso PC2 esegue livelli 0-18 e PC1 livelli 19-42 piu output. Le due divisioni sono ipotesi iniziali da misurare, non garanzie di memoria o prestazioni.
+
+Per cambiare ruolo: terminare la chat e il worker in modo ordinato, adeguare le regole firewall, poi riavviare con la coppia di comandi scelta. Chiudere prima i listener diagnostici sulle porte 9911/9912. Non interrompere il trasferimento HTTP 9913 se ancora in corso.
+
+`DS4_DRY_RUN=1 bash due-pc.sh ...` stampa il comando senza caricare il modello o aprire porte.
+
+La chat e soltanto sul coordinator scelto. Non usare curl/nc sulle porte del protocollo mentre ds4 attende il peer.
 Prima prova: prompt breve, confronto risposta e token/s con la baseline singolo PC, misura VRAM su entrambi.
 Se la combinazione pipeline+SSD incontra errori di caricamento/cache, servono ulteriori correzioni; non e ancora certificata dal nostro test locale.
 

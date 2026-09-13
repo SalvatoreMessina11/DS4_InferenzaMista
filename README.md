@@ -7,6 +7,8 @@ Prova locale: Windows 11 + WSL2 Ubuntu 24.04, RTX 5070 Ti 16 GB, 32 GB RAM; risp
 
 Per iniziare sul secondo PC: [SECONDO-PC.md](SECONDO-PC.md). Rete e avvii distribuiti: [DUE-PC.md](DUE-PC.md). Contesto tecnico per riprendere il lavoro: [HANDOFF-DS4.md](HANDOFF-DS4.md).
 
+**Due GPU, una sola chat:** `bash due-pc.sh` permette di scegliere coordinator (prompt e calcolo) oppure worker (solo calcolo). La chat puo stare sul PC1 o sul PC2; entrambi conservano il modello localmente. Ruoli, ripartizione dei livelli e firewall devono essere coerenti fra i due PC. Gli avvii sono predisposti; il collaudo distribuito resta da completare.
+
 Le modifiche escludono dal percorso streaming IQ2 la cache MMQ di tutti gli esperti e consentono il caricamento degli esperti anche nei batch di prefill da un token. Codice e licenza MIT originali sono conservati; questa versione non e una release ufficiale di antirez.
 
 ---
