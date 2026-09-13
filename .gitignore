@@ -84,3 +84,6 @@ __pycache__/
 /AVVIA-DEEPSEEK.cmd
 /avvia-ds4.sh
 /LEGGIMI-AVVIO.txt
+/dist/*
+!/dist/DS4-Launcher.exe
+!/dist/DS4-Launcher.sha256
