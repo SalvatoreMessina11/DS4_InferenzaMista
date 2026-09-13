@@ -22408,7 +22408,7 @@ static bool metal_graph_cuda_stream_prefill_batch_selected_load(
     if (!metal_graph_decode_cuda_selected_slots_expected(g, layer) ||
         !model ||
         !metal_graph_batch_router_selected(g) ||
-        n_tokens <= 1 ||
+        n_tokens == 0 ||
         DS4_N_EXPERT == 0 ||
         DS4_N_EXPERT_USED == 0 ||
         getenv("DS4_CUDA_DISABLE_STREAMING_PREFILL_BATCH_SELECTED_LOAD") != NULL) {

@@ -66,3 +66,21 @@ __pycache__/
 /misc/
 .*.swp
 .DS_Store
+
+# Local inference artifacts and machine-specific setup records.
+*.gguf
+*.gguf.part
+*.before-local-streaming
+/prova-*.log
+/prova-risorse.csv
+/model-verification.json
+/SETUP-LOCALE.md
+/setup-cuda-wsl.sh
+/fix-local-streaming.py
+/inspect-model-header.py
+/verify-model.py
+/prova-ds4.py
+/MONITOR-GPU.ps1
+/AVVIA-DEEPSEEK.cmd
+/avvia-ds4.sh
+/LEGGIMI-AVVIO.txt

@@ -1,3 +1,16 @@
+# DS4_InferenzaMista
+
+Versione personale di [antirez/ds4](https://github.com/antirez/ds4), con due correzioni locali per DeepSeek V4 Flash Q2 in CUDA SSD streaming.
+I pesi **non sono inclusi**: il modello ufficiale occupa circa 81 GiB e viene scaricato separatamente oppure copiato da un altro PC.
+
+Prova locale: Windows 11 + WSL2 Ubuntu 24.04, RTX 5070 Ti 16 GB, 32 GB RAM; risposta corretta a una domanda breve, circa 0.8 token/s. Non e una validazione numerica completa. La pipeline su due PC e preparata ma **non ancora collaudata**.
+
+Per iniziare sul secondo PC: [SECONDO-PC.md](SECONDO-PC.md). Rete e avvii distribuiti: [DUE-PC.md](DUE-PC.md). Contesto tecnico per riprendere il lavoro: [HANDOFF-DS4.md](HANDOFF-DS4.md).
+
+Le modifiche escludono dal percorso streaming IQ2 la cache MMQ di tutti gli esperti e consentono il caricamento degli esperti anche nei batch di prefill da un token. Codice e licenza MIT originali sono conservati; questa versione non e una release ufficiale di antirez.
+
+---
+
 <p align="center">
   <img src="logo.svg" alt="DwarfStar logo" width="220">
 </p>
