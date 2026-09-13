@@ -47,3 +47,5 @@ powershell -NoProfile -ExecutionPolicy Bypass -File launcher\build.ps1
 
 Controllati: compilazione x64, comandi dei quattro abbinamenti ruolo/GPU, rifiuto IP non validi, passaggio stringhe Windows->WSL, verifica reale WSL/GPU sul PC1, blocco con listener diagnostico presente e layout della finestra.
 `DS4-Launcher.exe --self-test` esegue i controlli di sviluppo sulla configurazione PC1 e produce un report; non e una prova di inferenza distribuita. Pipeline reale e avvio sul PC2 ancora da collaudare. Pulsante firewall da verificare alla prima configurazione sul PC2.
+
+Correzione firewall mirrored: le regole Hyper-V esplicite usano il suffisso -WSL per evitare collisioni con quelle Windows ereditate. Configurazione e ripetizione verificate sul PC1 per TCP 9911/9912, con accesso limitato al PC2.
