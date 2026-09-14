@@ -2,7 +2,27 @@
 
 Apri **[dist/DS4-Launcher.exe](../dist/DS4-Launcher.exe)** da Windows su entrambi i PC. Il file e autonomo come launcher: non richiede Codex, Python Windows o GitHub Desktop. Richiede Windows x64 con .NET Framework 4.5+ e una configurazione WSL/DS4 gia completata.
 
-Il modello, Ubuntu, CUDA e il binario Linux non sono incorporati nell'exe. La copia/verifica del GGUF sul PC2 deve terminare prima dell'avvio. Il launcher non installa Linux, non riavvia WSL e non interrompe trasferimenti.
+Il modello, Ubuntu, CUDA, Pi e il binario Linux non sono incorporati nell'exe. La copia/verifica del GGUF sul PC2 deve terminare prima dell'avvio. Il launcher non installa Linux o Pi e non cambia automaticamente la rete. Stop arresta la distribuzione solo dopo l'avviso sui processi e trasferimenti che verranno interrotti.
+
+## Frontend, context e comandi
+
+Scegli **Chat DS4** oppure **Pi Agent** sul coordinatore o in locale. Sul worker Pi viene disabilitato automaticamente. Il campo context e numerico: preset 100000, 300000 oppure Personalizzato, da 2048 a 1000000. Il nuovo default e 100000 anche per le impostazioni precedenti senza questo campo. Imposta lo stesso valore sui due PC; il launcher non sincronizza le impostazioni attraverso la rete. Sopra 300K compare una nota sulla memoria. Questi contesti non sono certificati sull'hardware corrente; per confronti col vecchio avvio imposta 2048.
+
+Lo split resta automatico 24/19 per le due GPU; seleziona Split personalizzato per scegliere 1–42 livelli sul coordinatore, con lo stesso numero sul worker. **Comando** mostra il comando effettivo e le variabili d'ambiente senza avviare processi o modificare la rete.
+
+**Pi Agent:** Verifica controlla `command -v pi`, `pi --version`, Python3 e ds4-server. Se manca Pi, mostra un errore; Chat DS4 resta disponibile. **Configura Pi** aggiorna solo il provider ds4 in `~/.pi/agent/models.json`, salvando prima un backup timestamped e preservando gli altri provider. Un JSON invalido resta intatto e blocca l'operazione. Anche Avvia effettua questo merge.
+
+Avvia apre ds4-server in una console, legato a **127.0.0.1:8000**, poi verifica `/v1/models` ogni secondo per un massimo di cinque minuti. Solo dopo aver trovato il modello atteso apre Pi in Windows Terminal, con fallback a console interattiva. Un errore del server o timeout impedisce l'apertura di Pi; Stop resta disponibile durante l'attesa. Non vengono sondate le porte di protocollo 9911/9912. La configurazione Pi usa lo stesso context, output massimo min(16384, context/2), KV su `$HOME/.cache/ds4-kv` con budget 8192 MB. I tool Pi lavorano nella cartella DS4 del coordinatore.
+
+## Avanzamento live
+
+La Chat DS4 (locale o coordinatore) aggiorna il titolo della console ogni 500 ms: fase, token elaborati/emessi, token/s **medi dall'inizio della fase**, tempo trascorso. Nel prefill distribuito il conteggio resta quello dei blocchi confermati; durante un blocco il tempo continua ad avanzare e la media si aggiorna. Non e una stima di token remoti non ancora completati. Il worker non genera una seconda risposta. Le statistiche finali restano disponibili; gli indicatori nel titolo non vengono scritti su stdout e sono disabilitati con stderr reindirizzato oppure `DS4_LIVE_STATUS=0`. Il terminale deve supportare titoli OSC; eventuali titoli fissi imposti da Windows Terminal possono nasconderli. Pi utilizza la propria TUI, non gli indicatori della CLI ds4.
+
+## Wi-Fi ed Ethernet
+
+Per la rete esistente scegli Wi-Fi/LAN, inserisci IP locale/peer e usa Configura rete. Per un cavo diretto scegli Ethernet diretto e Configura rete: seleziona la scheda fisica dedicata e PC1/PC2 indipendentemente dal ruolo DS4. Il setup usa `192.168.250.1/30` e `.2/30`, senza gateway, e mostra il link realmente negoziato. Ripeti sull'altro PC. Il setup rifiuta schede con IP/gateway preesistenti e reti sovrapposte; non modifica Wi-Fi o route predefinita. Le regole Windows/Hyper-V dedicate consentono solo 9911/9912 fra i due peer, mai HTTP 8000. Rete WSL mirrored resta necessaria in modalita distribuita.
+
+Tornando alla rete Wi-Fi reinserisci gli IP LAN nei campi: cambiare selettore non ripristina DHCP sulla scheda Ethernet. Per ripristinarla usa le impostazioni IPv4 Windows della sola scheda dedicata e rimuovi solo le regole `DS4Ethernet-<indice>-9911/9912` e corrispondenti `-WSL`, se non piu necessarie. Non cambiare la scheda Wi-Fi.
 
 ## Chat su un solo PC
 
@@ -43,7 +63,7 @@ Scegli **Coordinatore** sul PC dove vuoi scrivere; sull'altro scegli **Worker**.
 
 1. **Verifica** controlla cartella, modello presente, rete mirrored, IP locale e GPU. Non calcola nuovamente SHA256: la verifica del file va completata separatamente.
 2. **Configura rete**, alla prima configurazione o quando cambiano gli IP, richiede UAC e crea le regole Windows/Hyper-V per TCP 9911 e 9912 limitate all'altro PC. Non cambia il profilo di rete, non disabilita il firewall e non tocca la porta 9913.
-3. **Avvia** apre la console DS4 del ruolo scelto. Nel coordinatore scrivi i prompt; il worker mostra soltanto attivita e diagnostica. Velocita prefill/generazione riportate da DS4 al termine della risposta.
+3. **Avvia** apre la console DS4 del ruolo scelto, oppure server e Pi dopo la readiness. Nel coordinatore scrivi i prompt; il worker mostra soltanto attivita e diagnostica. La Chat DS4 mostra velocita live nel titolo e statistiche finali.
 
 Le impostazioni sono salvate per utente Windows in `%LOCALAPPDATA%\DS4Launcher\settings.xml`. Il launcher cerca il binario nella home dell'utente Ubuntu se lasci vuota la cartella. Non copiare le impostazioni del PC1 sul PC2.
 
@@ -55,11 +75,14 @@ Nel repository del secondo PC:
 
 ```sh
 git pull --ff-only
+make -j4 ds4 ds4-server CUDA_ARCH=sm_120
 ```
 
 Se il repository e nella home Ubuntu, aprilo da Esplora file tramite `\\wsl.localhost\Ubuntu-24.04\home\NOME_UTENTE\DS4_InferenzaMista\dist` e fai doppio clic su `DS4-Launcher.exe`. Puoi anche copiare soltanto l'exe sul Desktop Windows.
 
 L'eseguibile non e firmato digitalmente: Windows puo mostrarne l'autore come sconosciuto.
+
+L'icona e gli script Ethernet/Pi sono incorporati: non occorre copiare file di supporto accanto all'exe. Le nuove metriche richiedono il motore ricompilato, non soltanto l'exe. Test e comandi completi: [VALIDATION.md](VALIDATION.md).
 
 ## Build e verifiche
 

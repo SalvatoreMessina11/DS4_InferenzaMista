@@ -15,6 +15,10 @@ server. The `dsv4-local` strings are placeholders, not server authentication.
 
 ## Pi
 
+The Windows launcher now configures Pi optionally, on the local/coordinator PC only. Select Pi Agent and a context (100000, 300000, or custom). It atomically merges only the `ds4` provider into `~/.pi/agent/models.json`, backs up existing valid JSON, preserves other providers, and refuses invalid JSON. The provider context matches `--ctx`; maximum output is capped at min(16384, context/2). Pi must already be installed for that Ubuntu user; no automatic installation occurs.
+
+The launcher starts `ds4-server --host 127.0.0.1 --port 8000`, polls `/v1/models` for up to 300 seconds, checks the launched server process, and only then opens `pi --model ds4/deepseek-v4-flash` in a terminal. Workers run `ds4`, without Pi. No LAN firewall rule for port 8000 is created. See [launcher guide](../launcher/README.md).
+
 Add this provider to `~/.pi/agent/models.json`:
 
 ```json

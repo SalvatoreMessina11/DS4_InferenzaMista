@@ -27,6 +27,7 @@
 #include <stdarg.h>
 #include <time.h>
 #include <unistd.h>
+#include <pthread.h>
 
 static bool cli_env_flag_enabled(const char *name, bool defval) {
     const char *v = getenv(name);
@@ -307,6 +308,72 @@ static double cli_now_sec(void) {
     return (double)ts.tv_sec + (double)ts.tv_nsec * 1.0e-9;
 }
 
+/* Status belongs in the terminal title, never in the assistant's text.
+ * A timer keeps elapsed time/rate fresh while a distributed chunk is pending.
+ * Counters only advance on actual engine callbacks or emitted decode tokens. */
+static pthread_mutex_t cli_live_mu = PTHREAD_MUTEX_INITIALIZER;
+static bool cli_live_started, cli_live_active;
+static int cli_live_count, cli_live_total;
+static double cli_live_start;
+static const char *cli_live_phase = "Prefill";
+
+static void *cli_live_loop(void *unused) {
+    (void)unused;
+    for (;;) {
+        struct timespec delay = {0, 500000000};
+        nanosleep(&delay, NULL);
+        pthread_mutex_lock(&cli_live_mu);
+        if (cli_live_active) {
+            double elapsed = cli_now_sec() - cli_live_start;
+            fprintf(stderr, "\033]0;DS4 | %s %d/%d token | %.2f token/s medi | %.1f s\007",
+                    cli_live_phase, cli_live_count, cli_live_total,
+                    elapsed > 0 ? cli_live_count / elapsed : 0.0, elapsed);
+            fflush(stderr);
+        }
+        pthread_mutex_unlock(&cli_live_mu);
+    }
+    return NULL;
+}
+
+static void cli_live_begin(const char *phase, int total, double start) {
+    if (!isatty(STDERR_FILENO) || !cli_env_flag_enabled("DS4_LIVE_STATUS", true)) return;
+    pthread_mutex_lock(&cli_live_mu);
+    if (!cli_live_started) {
+        pthread_t thread;
+        if (pthread_create(&thread, NULL, cli_live_loop, NULL) != 0) {
+            pthread_mutex_unlock(&cli_live_mu);
+            return;
+        }
+        pthread_detach(thread);
+        cli_live_started = true;
+    }
+    cli_live_phase = phase;
+    cli_live_count = 0;
+    cli_live_total = total;
+    cli_live_start = start;
+    cli_live_active = true;
+    pthread_mutex_unlock(&cli_live_mu);
+}
+
+static void cli_live_count_set(int count) {
+    pthread_mutex_lock(&cli_live_mu);
+    if (cli_live_active && count > cli_live_count) cli_live_count = count;
+    pthread_mutex_unlock(&cli_live_mu);
+}
+
+static void cli_live_end(void) {
+    pthread_mutex_lock(&cli_live_mu);
+    if (cli_live_active) {
+        double elapsed = cli_now_sec() - cli_live_start;
+        fprintf(stderr, "\033]0;DS4 | %s terminata: %d token | %.2f token/s medi\007",
+                cli_live_phase, cli_live_count,
+                elapsed > 0 ? cli_live_count / elapsed : 0.0);
+        fflush(stderr);
+    }
+    cli_live_active = false;
+    pthread_mutex_unlock(&cli_live_mu);
+}
+
 static char *read_prompt_file(const char *path, bool fatal);
 
 typedef struct {
@@ -328,6 +395,7 @@ static void cli_prefill_progress_cb(void *ud, const char *event, int current, in
     int processed = current - p->base_tokens;
     if (processed < 0) processed = 0;
     if (processed > p->input_tokens) processed = p->input_tokens;
+    cli_live_count_set(processed);
     double pct = 100.0 * (double)processed / (double)p->input_tokens;
     if (pct > 100.0) pct = 100.0;
 
@@ -386,6 +454,8 @@ typedef struct {
     bool last_output_newline;
     char pending[16];
     size_t pending_len;
+    int live_limit;
+    int live_tokens;
 } token_printer;
 
 static bool bytes_has_prefix(const char *p, size_t n, const char *prefix) {
@@ -493,6 +563,10 @@ static void token_printer_write_text(token_printer *p, const char *text, size_t 
 
 static void print_generated_token(void *ud, int token) {
     token_printer *p = ud;
+    if (p->live_limit > 0) {
+        if (p->live_tokens == 0) cli_live_begin("Generazione", p->live_limit, cli_now_sec());
+        cli_live_count_set(++p->live_tokens);
+    }
     size_t len = 0;
     char *text = ds4_token_text(p->engine, token, &len);
     token_printer_write_text(p, text, len);
@@ -567,6 +641,7 @@ static int run_sampled_generation(ds4_engine *engine, const cli_config *cfg, con
     };
 
     const double t_prefill0 = cli_now_sec();
+    cli_live_begin("Prefill", progress.input_tokens, t_prefill0);
     ds4_session_set_progress(session, cli_prefill_progress_cb, &progress);
     ds4_session_set_display_progress(session,
                                      progress.use_color ? cli_prefill_progress_cb : NULL,
@@ -575,6 +650,7 @@ static int run_sampled_generation(ds4_engine *engine, const cli_config *cfg, con
     int sync_rc = ds4_session_sync(session, prompt, err, sizeof(err));
     cli_dist_busy_set(cfg, false);
     if (sync_rc != 0) {
+        cli_live_end();
         ds4_session_set_progress(session, NULL, NULL);
         ds4_session_set_display_progress(session, NULL, NULL);
         fprintf(stderr, "ds4: prompt processing failed: %s\n", err);
@@ -602,6 +678,7 @@ static int run_sampled_generation(ds4_engine *engine, const cli_config *cfg, con
     bool have_greedy_next = false;
     int greedy_next = -1;
     const double t_decode0 = cli_now_sec();
+    cli_live_begin("Generazione", max_tokens, t_decode0);
     while (generated < max_tokens && !cli_interrupt_requested()) {
         int token;
         if (greedy_argmax && have_greedy_next) {
@@ -626,6 +703,7 @@ static int run_sampled_generation(ds4_engine *engine, const cli_config *cfg, con
                 err, sizeof(err));
             cli_dist_busy_set(cfg, false);
             if (ntok < 0) {
+                cli_live_end();
                 fprintf(stderr, "ds4: decode failed: %s\n", err);
                 ds4_session_free(session);
                 return 1;
@@ -637,6 +715,7 @@ static int run_sampled_generation(ds4_engine *engine, const cli_config *cfg, con
             fflush(stdout);
             free(piece);
             generated++;
+            cli_live_count_set(generated);
             if (generated >= max_tokens || cli_interrupt_requested()) {
                 continue;
             }
@@ -645,6 +724,7 @@ static int run_sampled_generation(ds4_engine *engine, const cli_config *cfg, con
             int eval_rc = ds4_session_eval(session, token, err, sizeof(err));
             cli_dist_busy_set(cfg, false);
             if (eval_rc != 0) {
+                cli_live_end();
                 fprintf(stderr, "ds4: decode failed: %s\n", err);
                 ds4_session_free(session);
                 return 1;
@@ -664,11 +744,13 @@ static int run_sampled_generation(ds4_engine *engine, const cli_config *cfg, con
             fflush(stdout);
             free(piece);
             generated++;
+            cli_live_count_set(generated);
             if (generated >= max_tokens) break;
         }
         if (stop) break;
     }
     const double t_decode1 = cli_now_sec();
+    cli_live_end();
     generation_done(&printer);
     if (cli_interrupt_requested()) cli_interrupt_clear();
 
@@ -1261,6 +1343,8 @@ static int run_generation(ds4_engine *engine, const cli_config *cfg) {
                 .input_tokens = prompt.len,
                 .use_color = ds4_log_is_tty(stderr),
             };
+            printer.live_limit = cfg->gen.n_predict;
+            cli_live_begin("Prefill", prompt.len, cli_now_sec());
             rc = ds4_engine_generate_argmax(engine, &prompt, cfg->gen.n_predict,
                                             cfg->gen.ctx_size,
                                             print_generated_token,
@@ -1268,6 +1352,7 @@ static int run_generation(ds4_engine *engine, const cli_config *cfg) {
                                             &printer,
                                             cli_prefill_progress_cb,
                                             &progress);
+            cli_live_end();
         }
     }
 
@@ -1559,6 +1644,7 @@ static int run_chat_turn(ds4_engine *engine, cli_config *cfg, repl_chat *chat,
         .use_color = ds4_log_is_tty(stderr),
     };
     const double t_prefill0 = cli_now_sec();
+    cli_live_begin("Prefill", progress.input_tokens, t_prefill0);
     ds4_session_set_progress(chat->session, cli_prefill_progress_cb, &progress);
     ds4_session_set_display_progress(chat->session,
                                      progress.use_color ? cli_prefill_progress_cb : NULL,
@@ -1572,6 +1658,7 @@ static int run_chat_turn(ds4_engine *engine, cli_config *cfg, repl_chat *chat,
                                               sizeof(err));
     cli_dist_busy_set(cfg, false);
     if (sync_rc != 0) {
+        cli_live_end();
         ds4_session_set_progress(chat->session, NULL, NULL);
         ds4_session_set_display_progress(chat->session, NULL, NULL);
         chat->transcript.len = rollback_len;
@@ -1609,6 +1696,7 @@ static int run_chat_turn(ds4_engine *engine, cli_config *cfg, repl_chat *chat,
     bool have_greedy_next = false;
     int greedy_next = -1;
     const double t_decode0 = cli_now_sec();
+    cli_live_begin("Generazione", max_tokens, t_decode0);
     while (generated < max_tokens && !cli_interrupt_requested()) {
         int token;
         if (greedy_argmax && have_greedy_next) {
@@ -1637,6 +1725,7 @@ static int run_chat_turn(ds4_engine *engine, cli_config *cfg, repl_chat *chat,
                 err, sizeof(err));
             cli_dist_busy_set(cfg, false);
             if (ntok < 0) {
+                cli_live_end();
                 fprintf(stderr, "ds4: decode failed: %s\n", err);
                 return 1;
             }
@@ -1648,11 +1737,13 @@ static int run_chat_turn(ds4_engine *engine, cli_config *cfg, repl_chat *chat,
             fflush(stdout);
             free(piece);
             generated++;
+            cli_live_count_set(generated);
 
             cli_dist_busy_set(cfg, true);
             int eval_rc = ds4_session_eval(chat->session, token, err, sizeof(err));
             cli_dist_busy_set(cfg, false);
             if (eval_rc != 0) {
+                cli_live_end();
                 fprintf(stderr, "ds4: decode failed: %s\n", err);
                 ds4_session_invalidate(chat->session);
                 return 1;
@@ -1674,11 +1765,13 @@ static int run_chat_turn(ds4_engine *engine, cli_config *cfg, repl_chat *chat,
             fflush(stdout);
             free(piece);
             generated++;
+            cli_live_count_set(generated);
             if (generated >= max_tokens) break;
         }
         if (stop) break;
     }
     const double t_decode1 = cli_now_sec();
+    cli_live_end();
     generation_done(&printer);
 
     const bool interrupted = cli_interrupt_requested();

@@ -1,5 +1,17 @@
 # Due PC NVIDIA: configurazione sperimentale
 
+## Launcher con Pi, Ethernet e context
+
+Il nuovo exe offre Chat DS4 / Pi Agent, rete esistente / Ethernet diretto, context 100K/300K/custom e split personalizzato. Consulta [guida launcher](launcher/README.md) e [validazione](launcher/VALIDATION.md). I comandi shell storici sotto restano esempi con ctx 2048; il launcher usa il valore scelto, default 100000.
+
+PC1 coordinatore Pi via Wi-Fi: scegli rete esistente, Coordinatore, GPU effettiva, Pi Agent e context, imposta gli IP, poi Verifica e Avvia. Serve Pi installato nell'utente Ubuntu del coordinatore.
+
+PC2 worker: scegli rete esistente, Worker, GPU effettiva, **stesso context e split**, poi Verifica e Avvia prima del coordinatore. Il worker riprova il collegamento mentre il coordinatore parte. Non installare Pi sul worker. Pi viene aperto sul coordinatore solo dopo la readiness HTTP localhost:8000.
+
+Ethernet diretto: collega il cavo, scegli Ethernet diretto e Configura rete su entrambi. Seleziona numeri fisici PC1/PC2 opposti, ottenendo 192.168.250.1/.2; puoi comunque assegnare il ruolo coordinatore a uno qualsiasi dei due. Non sono necessarie regole LAN per 8000.
+
+Le metriche live della Chat DS4 stanno nel titolo della console del coordinatore. Il conteggio prefill remoto viene confermato per blocchi; il tempo si aggiorna anche durante l'attesa. Prestazioni su due PC, tool Pi reali e allocazione di contesti 100K/300K restano da collaudare sul sistema completo.
+
 Stato: avvii preparati, non ancora collaudati su due computer. La chat su un PC e gia stata provata. Non confondere i due risultati.
 
 PC1: RTX 5070 Ti 16 GB + 32 GB RAM. PC2: RTX 5070 12 GB + 32 GB RAM (dati forniti dall'utente).
