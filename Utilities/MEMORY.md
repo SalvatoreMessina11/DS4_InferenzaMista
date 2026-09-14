@@ -40,3 +40,5 @@ Mai aggiungere pesi/binari di terzi/cache/log privati al commit. Conservare lo s
 AIutante.exe e hash ora in Utilities/Artifacts. Build incorpora icona Utilities/AIUTANTE_icon.ico. Output massimo configurabile default16384, migrazione settings da DS4Launcher a AIutante. Qwen scaricato/verificato, 64 livelli context262144 (metadati qwen35); backend llama.cpp CUDA/RPC in compilazione. Pi ancora non trovato, ricerca NVM aggiunta. OCR repo clonato e wrapper predisposto, inferenza non testata. Utente ha richiesto anche collegamento Desktop. Ancora nulla pubblicato.
 
 Qwen prova context100000 riuscita: pesi CUDA9808MiB e host1407MiB; contextCUDA3246MiB. Prova2048 circa38-40t/s breve. OCR dipendenze installate e check passato; pesi non scaricati. ShortcutDesktop creato. Test finali42launcher+8Pi passati. Commit/push in preparazione; tutte le vecchie risorse Git preservate sottoDS4, vecchioexe escluso a favoreUtilities/Artifacts/AIutante.exe.
+
+Pubblicati d15c5f4 e f9c3037, SHA remoto verificato. Context100000 prova breve39.2t/s prefill e15.7t/s generazione. Desktop AIutante.lnk creato. Nessun modello di prova lasciato attivo.

@@ -65,4 +65,6 @@ Aggiornare le caselle soltanto con evidenza. Separare supporto implementato, sim
 - [ ] Pesi/inferenza OCR reale e convivenza OCR/LLM: non collaudati; download pesi al primo uso.
 - [ ] Pi installazione effettiva: non trovata nei percorsi controllati; diagnostica e ricerca migliorate.
 - [ ] Prova fisica RPC su PC2 e contesti lunghi pieni: richiedono prova sui due PC, nessuna prestazione distribuita dichiarata.
-- [ ] Commit/push: in preparazione dopo controllo dei file spostati (tutti i file precedentemente tracciati preservati).
+- [x] Commit/push: d15c5f4 e f9c3037 pubblicati e SHA remoto verificato; file e permessi Linux precedenti preservati.
+
+Context100000, prompt breve: prefill39.2t/s, generazione15.7t/s. Non confondere con38-40t/s ottenuti a2048. Collegamento desktop presente. Restano prove fisiche PC2, Pi effettivo e OCR con pesi.
