@@ -82,11 +82,15 @@ def process_alive(pid):
 
 
 def wait_ready(pid_file, timeout=300, interval=1, url='http://127.0.0.1:8000/v1/models',
-               alive=process_alive, model='ds4'):
+               alive=process_alive, model='ds4', progress=False):
     deadline = time.monotonic() + timeout
     pid_file = Path(pid_file)
+    next_status = 0.0
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     while time.monotonic() < deadline:
+        if progress and time.monotonic() >= next_status:
+            print("Attendo il server LLM... " + str(int(timeout - max(0, deadline - time.monotonic()))) + " s", flush=True)
+            next_status = time.monotonic() + 5
         if Path(str(pid_file) + '.finished').exists():
             raise RuntimeError('Avvio server terminato; controlla la console server. Pi non avviato.')
         if pid_file.exists():
@@ -122,12 +126,12 @@ def main():
     args = parser.parse_args()
     if args.action == 'configure':
         configure(args.config, args.context, args.max_output, args.model)
-        print('Provider Pi ds4 configurato; context=' + str(args.context))
+        print('Provider Pi ' + args.model + ' configurato; context=' + str(args.context))
     else:
         if not args.pid_file:
             parser.error('--pid-file necessario')
-        wait_ready(args.pid_file, args.timeout, model=args.model)
-        print('DS4_READY')
+        wait_ready(args.pid_file, args.timeout, model=args.model, progress=True)
+        print('Modello pronto. Avvio Pi Agent.', flush=True)
 
 
 if __name__ == '__main__':

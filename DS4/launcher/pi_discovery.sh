@@ -7,9 +7,15 @@ if ! command -v pi >/dev/null; then
     done
 fi
 if ! command -v pi >/dev/null; then
-    for bin in $(find "$HOME/.nvm/versions/node" -mindepth 2 -maxdepth 2 -type d -name bin 2>/dev/null | sort -Vr); do
+    # Portable Node installation used by the AIutante setup.
+    while IFS= read -r bin; do
+        if [ -x "$bin/pi" ] && [ -x "$bin/node" ]; then export PATH="$bin:$PATH"; break; fi
+    done < <(find "$HOME/.local/share/pi-node" -mindepth 2 -maxdepth 2 -type d -name bin 2>/dev/null | sort -Vr)
+fi
+if ! command -v pi >/dev/null; then
+    while IFS= read -r bin; do
         if [ -x "$bin/pi" ]; then export PATH="$bin:$PATH"; break; fi
-    done
+    done < <(find "$HOME/.nvm/versions/node" -mindepth 2 -maxdepth 2 -type d -name bin 2>/dev/null | sort -Vr)
 fi
 if ! command -v pi >/dev/null; then
     printf 'Pi non trovato per utente Ubuntu %s (HOME=%s).\n' "$(id -un)" "$HOME"
@@ -18,4 +24,5 @@ if ! command -v pi >/dev/null; then
     exit 1
 fi
 printf 'Pi: %s\n' "$(command -v pi)"
+command -v node >/dev/null || { echo 'Pi trovato ma Node Linux manca dal PATH'; exit 1; }
 pi --version

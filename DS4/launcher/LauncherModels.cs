@@ -13,7 +13,7 @@ partial class DS4Launcher {
     void InitModelControls() {
         model.DropDownStyle=ComboBoxStyle.DropDownList;
         model.Items.AddRange(new object[]{"DeepSeek V4 Flash (DS4)","Qwen3.8 27B IQ3_S (llama.cpp)"});
-        model.SelectedIndex=0;
+        model.SelectedIndex=1;
         qwenFolder.Text="/home/ds4/aiutante-qwen";
         gpuLayers.Minimum=-1;gpuLayers.Maximum=65;gpuLayers.Value=-1;
     }
@@ -24,7 +24,8 @@ partial class DS4Launcher {
         foreach(Control c in Controls)if(c.Top>=466)c.Top+=42;
         Row("Qwen: livelli GPU (-1 = automatico)",gpuLayers,466);
         ClientSize=new Size(820,1041);
-        model.SelectedIndexChanged+=delegate{Summary();};
+        model.SelectedIndexChanged+=delegate{RefreshContextPresets();Summary();};
+        RefreshContextPresets();
         new ToolTip().SetToolTip(gpuLayers,"Qwen ha 64 livelli + output. -1 lascia al backend la scelta in base alla VRAM; 0 usa la CPU. Il resto rimane in RAM. In RPC il totale GPU e distribuito fra i PC.");
         Summary();
     }

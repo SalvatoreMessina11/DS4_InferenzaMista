@@ -122,3 +122,13 @@ make -j4 ds4 ds4-server CUDA_ARCH=sm_120
 ```
 
 Apri l'exe nuovo da Windows. Il solo aggiornamento dell'exe non ricompila il motore Linux. Non serve trasferire nuovamente il GGUF.
+
+## Correzione Pi e interfaccia
+
+Pi individuato e verificato versione0.85.1 in /home/ds4/.local/share/pi-node/node-v22.23.2-linux-x64/bin/pi. Discovery aggiunge anche Node al PATH. Test percorsi portable/NVM con spazi passato.
+
+Terminale Pi aperto subito tramite la stessa console gestita del server, senza passaggio Windows Terminal. Readiness eseguita nella finestra Pi con stato ogni5secondi e timeout900secondi; errore visibile, non finestra silenziosamente assente. Non si dichiara pronto prima del controllo API.
+
+Default Qwen+Pi/soloPC/output32768; migrazione impostazioni con versionamento e preservazione delle scelte future. Preset Qwen fino262144,300K escluso. Pulsanti Aiuto Pi e Dettagli avvio con spiegazioni; configurazione provider automatica. Build e42casi offline,8testPython,discovery passati.
+
+Prova reale finale Pi0.85.1+Qwen context8192 riuscita: toolCall read, toolResult isError=false, rispostaAIUTANTE_PI_READ_OK. ProcessoPi exit0. Test senza sessioni persistenti, configurazione temporanea; server di prova chiuso al termine. La prova riguarda Qwen locale, non DeepSeek o PC2.

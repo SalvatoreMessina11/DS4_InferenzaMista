@@ -42,3 +42,27 @@ AIutante.exe e hash ora in Utilities/Artifacts. Build incorpora icona Utilities/
 Qwen prova context100000 riuscita: pesi CUDA9808MiB e host1407MiB; contextCUDA3246MiB. Prova2048 circa38-40t/s breve. OCR dipendenze installate e check passato; pesi non scaricati. ShortcutDesktop creato. Test finali42launcher+8Pi passati. Commit/push in preparazione; tutte le vecchie risorse Git preservate sottoDS4, vecchioexe escluso a favoreUtilities/Artifacts/AIutante.exe.
 
 Pubblicati d15c5f4 e f9c3037, SHA remoto verificato. Context100000 prova breve39.2t/s prefill e15.7t/s generazione. Desktop AIutante.lnk creato. Nessun modello di prova lasciato attivo.
+
+Utente segnala Pi scaricato ma non funzionante. Richiede etichette LLM per usare DeepSeek o Qwen direttamente o tramite harness Pi. Diagnosi in corso, non assumere che un download sia installato/PATH corretto.
+
+
+## Stato aggiornato: Pi e nuove preferenze
+
+Utente conferma che selezionando Pi con DeepSeek o Qwen compare solo il terminale server. Problema di apertura/readiness del terminale Pi ANCORA DA RISOLVERE. Pi esiste: /home/ds4/.local/share/pi-node/node-v22.23.2-linux-x64/bin/pi, versione0.85.1. Discovery aggiornato per includere anche Node della stessa distribuzione nel PATH, verificato --version. Non reinstallare Pi.
+
+Etichette locali aggiornate a Chat LLM (solo modello) e LLM + Pi Agent (strumenti). Ultima prova completa Pi su Qwen NON passata: exit0/output vuoto, quindi tool read non verificato. Non presentarla come successo. Build/test offline42 e testPython8 passati; modifiche ancora non pubblicate dopoa555675.
+
+Nuove preferenze esplicite: default Solo questo PC, Qwen, Pi Agent, output alto; proposta32768 output comunicata, non100000. Aggiungere preset Qwen maggiori di100K fino262144;300K non supportato dal GGUF. Chiarire o semplificare Anteprima avvio e Configura Pi (configurazione gia automatica all'avvio). Preservare parametri rete/cartelle salvati. DesktopAIutante.lnk gia presente. Continuare diagnosi terminale, test reale e push dopo la correzione.
+
+## Correzioni completate - 14 settembre 2026
+
+- [x] Pi trovato nella distribuzione Node portatile; PATH corretto per Pi e Node, versione0.85.1 verificata.
+- [x] Terminale Pi aperto subito, separato dal server; attesa API visibile ogni5secondi fino900secondi, errori conservati nella finestra. Eliminato passaggio fragile tramite Windows Terminal.
+- [x] Prova reale Pi+Qwen context8192: toolCall read, toolResult non in errore, risposta AIUTANTE_PI_READ_OK. Il precedente risultato vuoto e superato dalla prova con stdin controllato e stream JSON.
+- [x] Interfaccia Chat LLM / LLM + Pi Agent; Aiuto Pi e Dettagli avvio con spiegazione. Provider configurato automaticamente.
+- [x] Default Qwen, Pi Agent, SoloPC, output32768; preferenze locali migrate con backup, rete/cartelle preservate. Contesto iniziale100000; preset Qwen fino262144 senza300K.
+- [x] Build,42combinazioni offline (inclusi contesti Qwen>100K),8test provider e discovery portable/NVM con spazi passati.
+- [x] Exe e hash aggiornati, collegamento Desktop esistente valido.
+- [ ] Pubblicazione delle correzioni: commit/push immediatamente successivi a questo aggiornamento.
+
+Restano limiti di collaudo: nessuna nuova prova DeepSeek+Pi sulla GPU o pipeline fisica PC2; OCR inferenza con pesi ancora non testata. Non significa che siano stati collaudati tutti i modelli e tutte le dimensioni di contesto.

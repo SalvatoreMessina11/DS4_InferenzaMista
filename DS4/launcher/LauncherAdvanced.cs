@@ -15,7 +15,6 @@ partial class DS4Launcher {
     Label contextNote=new Label();
     Process piConsole;
     bool changing;
-    bool stopRequested;
     bool piStarting, stopping;
     int OutputValue {get{return (int)maxOutput.Value;}}
     int ContextValue {get{return (int)context.Value;}}
@@ -23,10 +22,10 @@ partial class DS4Launcher {
 
     void InitAdvancedControls(){
         frontend.DropDownStyle=network.DropDownStyle=contextPreset.DropDownStyle=ComboBoxStyle.DropDownList;
-        frontend.Items.AddRange(new object[]{"Chat DS4","Pi Agent"});frontend.SelectedIndex=0;
+        frontend.Items.AddRange(new object[]{"Chat LLM (solo modello)","LLM + Pi Agent (strumenti)"});frontend.SelectedIndex=1;
         network.Items.AddRange(new object[]{"Wi-Fi / LAN esistente","Ethernet diretto"});network.SelectedIndex=0;
-        Row("Frontend",frontend,140);Row("Connessione tra i PC",network,182);
-        maxOutput.Minimum=1;maxOutput.Maximum=1000000;maxOutput.Value=16384;
+        Row("Modalita di utilizzo",frontend,140);Row("Connessione tra i PC",network,182);
+        maxOutput.Minimum=1;maxOutput.Maximum=1000000;maxOutput.Value=32768;
         context.Minimum=2048;context.Maximum=1000000;context.Value=100000;context.ThousandsSeparator=true;
         contextPreset.Items.AddRange(new object[]{"100K","300K","Personalizzato"});contextPreset.SelectedIndex=0;
         Row("Context (uguale sui due PC)",contextPreset,266);contextPreset.Width=180;
@@ -34,19 +33,18 @@ partial class DS4Launcher {
         contextNote.SetBounds(26,302,763,33);Controls.Add(contextNote);
         customSplit.Text="Split personalizzato: livelli coordinatore";customSplit.SetBounds(26,342,440,30);Controls.Add(customSplit);
         layers.Minimum=1;layers.Maximum=42;layers.Value=24;layers.SetBounds(510,342,279,31);Controls.Add(layers);
-        configurePi.Text="Configura Pi";configurePi.SetBounds(292,729,140,38);Controls.Add(configurePi);
-        preview.Text="Anteprima avvio";preview.SetBounds(440,729,123,38);Controls.Add(preview);
+        configurePi.Text="Aiuto Pi";configurePi.SetBounds(292,729,140,38);Controls.Add(configurePi);
+        preview.Text="Dettagli avvio";preview.SetBounds(440,729,123,38);Controls.Add(preview);
         contextPreset.SelectedIndexChanged+=delegate{
-            if(changing)return;changing=true;
-            if(contextPreset.SelectedIndex==0)context.Value=100000;
-            if(contextPreset.SelectedIndex==1)context.Value=300000;
-            changing=false;Summary();
+            if(changing)return;int value;
+            if(int.TryParse(Convert.ToString(contextPreset.SelectedItem),out value))context.Value=value;
         };
-        context.ValueChanged+=delegate{if(changing)return;changing=true;contextPreset.SelectedIndex=ContextValue==100000?0:ContextValue==300000?1:2;changing=false;Summary();};
+        context.ValueChanged+=delegate{if(!changing){RefreshContextPresets();Summary();}};
         frontend.SelectedIndexChanged+=delegate{Summary();};network.SelectedIndexChanged+=delegate{Summary();};
         customSplit.CheckedChanged+=delegate{Summary();};layers.ValueChanged+=delegate{Summary();};
-        configurePi.Click+=async delegate{Busy(true);try{ValidateFields();Save();log.Text=await CaptureWsl(PiCheck()+PiHelper("configure"+PiOptions)+"pi --list-models "+(Qwen?"qwen":"ds4")+"\n");}catch(Exception ex){Error(ex);}finally{Busy(false);}};
-        preview.Click+=delegate{try{ValidateFields();Save();log.Text=MemoryEnvironment()+ModelCommand()+(PiMode?"\r\nDopo readiness /v1/models: pi --model "+PiModel:"");}catch(Exception ex){Error(ex);}};
+        configurePi.Click+=delegate{MessageBox.Show(this,"Scegli un modello e LLM + Pi Agent, poi premi Avvia. La configurazione e automatica. Si aprono due terminali: server LLM e Pi; Pi attende il caricamento. Gli strumenti operano nell'utente Ubuntu selezionato.","Come usare Pi Agent",MessageBoxButtons.OK,MessageBoxIcon.Information);};
+        preview.Click+=delegate{try{ValidateFields();MessageBox.Show(this,"Parametri che Avvia eseguira. Questa finestra non avvia il modello.\r\n\r\n"+MemoryEnvironment()+ModelCommand(),"Dettagli tecnici dell'avvio",MessageBoxButtons.OK,MessageBoxIcon.Information);}catch(Exception ex){Error(ex);}};
+
     }
     void InitOutputControls(){
         foreach(Control c in Controls)if(c.Top>=342)c.Top+=82;
@@ -55,6 +53,19 @@ partial class DS4Launcher {
         new ToolTip().SetToolTip(preview,"Mostra il comando e i parametri che Avvia eseguira, senza avviare il modello.");
         new ToolTip().SetToolTip(layers,"DeepSeek V4 Flash: 43 livelli totali, 0-42 + output. Meta circa 21/22. Inserisci quanti assegnare al coordinatore.");
         maxOutput.ValueChanged+=delegate{Summary();};
+    }
+    void RefreshContextPresets(){
+        if(changing)return;changing=true;
+        int value=ContextValue;
+        context.Maximum=Qwen?262144:1000000;
+        if(value>context.Maximum)context.Value=context.Maximum;
+        contextPreset.Items.Clear();
+        foreach(int n in new[]{32768,65536,100000,131072,200000,262144})contextPreset.Items.Add(n.ToString());
+        if(!Qwen)contextPreset.Items.Add("300000");
+        contextPreset.Items.Add("Personalizzato");
+        int index=contextPreset.Items.IndexOf(ContextValue.ToString());
+        contextPreset.SelectedIndex=index<0?contextPreset.Items.Count-1:index;
+        changing=false;
     }
     void UpdateAdvancedState(){
         if(role.SelectedIndex==1 && frontend.SelectedIndex!=0)frontend.SelectedIndex=0;
@@ -85,39 +96,25 @@ partial class DS4Launcher {
     }
     async Task StartPi(){
         piStarting=true;
-        stopRequested=false;
         log.Text=await CaptureWsl(PiCheck()+PiHelper("configure"+PiOptions)+"pi --list-models "+(Qwen?"qwen":"ds4")+"\n");
         string pidFile="/tmp/ds4-launcher-"+Guid.NewGuid().ToString("N")+".pid";
         string server="trap "+Sh("printf failed > "+Sh(pidFile+".finished"))+" EXIT\n"+Preflight(true)+MemoryEnvironment()+ModelCommand()+" &\nserver=$!\nprintf '%s' \"$server\" > "+Sh(pidFile)+"\nwait \"$server\"\n";
-        modelConsole=OpenConsole(server,"DS4 server - localhost:8000");modelDistribution=distro.Text;
+        modelConsole=OpenConsole(server,"AIutante LLM server - localhost:8000");modelDistribution=distro.Text;
         stop.Enabled=true;
-        log.Text="Caricamento server... attendo /v1/models (massimo 5 minuti). Console server aperta.";
-        var ready=CaptureWsl(PiHelper("wait --pid-file "+Sh(pidFile)+" --timeout 300"+(Qwen?" --model qwen":"")),310000);
-        try{
-            while(!ready.IsCompleted){
-                await Task.WhenAny(ready,Task.Delay(1000));
-                if(stopRequested){ObserveFailure(ready);return;}
-                if(modelConsole.HasExited)throw new Exception("Console server chiusa prima della readiness. Pi non avviato.");
-            }
-            await ready;
-        }catch{ObserveFailure(ready);log.Text="Server non pronto. Pi non avviato; consulta la console server o premi Stop.";throw;}
-        if(stopRequested)return;
+        log.Text="Terminale server aperto. Apro Pi: attendera che il modello sia pronto.";
         string ocrPath="/home/ds4/aiutante-ocr/aiutante_ocr.py";
-        string pi=Resolve()+PiCheck()+"exec pi --model "+PiModel+" --append-system-prompt "+Sh("OCR locale disponibile tramite /home/ds4/aiutante-ocr/.venv/bin/python "+ocrPath+" INPUT --output CARTELLA. Prima usa --check e verifica la VRAM libera con nvidia-smi. Se dipendenze/pesi o memoria mancano, segnala il limite; non fermare il modello o installare pacchetti senza richiesta. Salva i risultati OCR su disco e leggi solo il testo necessario.")+"\n";
-        // Windows Terminal is preferred; the WSL shell is interactive in either case.
-        string wt=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"Microsoft","WindowsApps","wt.exe");
-        if(File.Exists(wt)){
-            piConsole=Process.Start(new ProcessStartInfo(wt,"-w new wsl.exe "+Args(pi)){UseShellExecute=true});
-        }else piConsole=OpenConsole(pi,"Pi Agent - DS4 locale");
-        log.Text="Server pronto. Pi Agent aperto sul coordinatore; tool eseguiti in Ubuntu locale. API solo localhost:8000.";
+        string pi="set -e\necho "+Sh("Pi Agent: attendo il modello, fino a 15 minuti. Gli errori restano in questa finestra.")+"\n"+PiHelper("wait --pid-file "+Sh(pidFile)+" --timeout 900"+(Qwen?" --model qwen":""))+Resolve()+PiCheck()+"exec pi --offline --model "+PiModel+" --append-system-prompt "+Sh("OCR locale disponibile tramite /home/ds4/aiutante-ocr/.venv/bin/python "+ocrPath+" INPUT --output CARTELLA. Prima usa --check e verifica la VRAM libera con nvidia-smi. Se dipendenze/pesi o memoria mancano, segnala il limite; non fermare il modello o installare pacchetti senza richiesta. Salva i risultati OCR su disco e leggi solo il testo necessario.")+"\n";
+        piConsole=OpenConsole(pi,"AIutante - Pi Agent");
+        log.Text="Aperti server LLM e Pi Agent. Pi mostra l'attesa e parte appena il modello e pronto. Se fallisce, leggi l'errore nel terminale Pi.";
+
     }
-    XElement AdvancedSettings(){return new XElement("advanced",new XElement("model",Qwen?"qwen":"ds4"),new XElement("qwenFolder",qwenFolder.Text),new XElement("gpuLayers",(int)gpuLayers.Value),new XElement("frontend",PiMode?"pi":"ds4"),new XElement("network",network.SelectedIndex==1?"ethernet":"wifi"),new XElement("context",ContextValue),new XElement("maxOutput",OutputValue),new XElement("customSplit",customSplit.Checked),new XElement("layers",(int)layers.Value));}
+    XElement AdvancedSettings(){return new XElement("advanced",new XElement("defaultsVersion",2),new XElement("model",Qwen?"qwen":"ds4"),new XElement("qwenFolder",qwenFolder.Text),new XElement("gpuLayers",(int)gpuLayers.Value),new XElement("frontend",PiMode?"pi":"ds4"),new XElement("network",network.SelectedIndex==1?"ethernet":"wifi"),new XElement("context",ContextValue),new XElement("maxOutput",OutputValue),new XElement("customSplit",customSplit.Checked),new XElement("layers",(int)layers.Value));}
     void ReadAdvanced(XElement root){var x=root.Element("advanced");if(x==null)return;model.SelectedIndex=(string)x.Element("model")=="qwen"?1:0;qwenFolder.Text=(string)x.Element("qwenFolder")??"/home/ds4/aiutante-qwen";gpuLayers.Value=Math.Max(-1,Math.Min(65,(int?)x.Element("gpuLayers")??-1));
         frontend.SelectedIndex=(string)x.Element("frontend")=="pi"?1:0;
         network.SelectedIndex=(string)x.Element("network")=="ethernet"?1:0;
-        maxOutput.Value=Math.Max(1,Math.Min(1000000,(int?)x.Element("maxOutput")??16384));
+        maxOutput.Value=Math.Max(1,Math.Min(1000000,(int?)x.Element("maxOutput")??32768));
         int n=(int?)x.Element("context")??100000;
-        context.Value=Math.Max(2048,Math.Min(1000000,n));
+        context.Maximum=Qwen?262144:1000000;context.Value=Math.Max(2048,Math.Min((int)context.Maximum,n));RefreshContextPresets();
         customSplit.Checked=(bool?)x.Element("customSplit")??false;
         layers.Value=Math.Max(1,Math.Min(42,(int?)x.Element("layers")??24));
     }
@@ -163,6 +160,9 @@ partial class DS4Launcher {
                     else {Expect(cmd.Contains("--predict 32000")&&cmd.Contains("--load-mode mlock")&&cmd.Contains("--lazy-mode off"),"Qwen output and resident weights");Expect(cmd.Contains("--rpc")== (r==0),"Qwen RPC role");}
                     cases++;
                 }
+                foreach(int ctx in new[]{131072,200000,262144}){f.context.Value=ctx;f.ValidateFields();Expect(f.ModelCommand().Contains("--ctx-size "+ctx),"Qwen context above 100K");}
+                Expect(!f.contextPreset.Items.Contains("300000"),"Qwen excludes invalid 300K preset");
+                f.context.Value=100000;
                 f.role.SelectedIndex=2;f.frontend.SelectedIndex=0;f.gpuLayers.Value=20;
                 Expect(f.ModelCommand().Contains("--gpu-layers 20"),"Qwen GPU override");
                 using(var other=new DS4Launcher()){other.skipShutdown=true;other.ApplySettings(f.Settings().Root);Expect(other.Qwen&&other.OutputValue==32000&&other.gpuLayers.Value==20,"Qwen settings roundtrip");}

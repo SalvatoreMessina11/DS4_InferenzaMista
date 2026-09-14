@@ -68,3 +68,40 @@ Aggiornare le caselle soltanto con evidenza. Separare supporto implementato, sim
 - [x] Commit/push: d15c5f4 e f9c3037 pubblicati e SHA remoto verificato; file e permessi Linux precedenti preservati.
 
 Context100000, prompt breve: prefill39.2t/s, generazione15.7t/s. Non confondere con38-40t/s ottenuti a2048. Collegamento desktop presente. Restano prove fisiche PC2, Pi effettivo e OCR con pesi.
+
+## Richiesta attiva: etichette LLM e avvio Pi
+- [ ] Rinominare Chat DS4 in Chat LLM, distinguere modello da harness.
+- [ ] Individuare installazione Pi effettiva e verificare avvio/configurazione.
+- [ ] Correggere, testare e pubblicare exe; conservare collegamento Desktop.
+
+
+## Priorita attuali: richieste utente su Pi, contesto e default
+
+Aggiornamento 14 settembre 2026. Lavoro IN CORSO; modifiche successive ad a555675 non ancora pubblicate.
+
+- [x] Sostituite etichette Chat DS4 con Chat LLM (solo modello) e LLM + Pi Agent (strumenti). Selezione valida per DeepSeek e Qwen, un modello per sessione.
+- [x] Individuato Pi 0.85.1 in /home/ds4/.local/share/pi-node/node-v22.23.2-linux-x64/bin/pi; Node e nella stessa cartella. Il precedente rapporto di installazione assente era incompleto.
+- [x] Corretto discovery: aggiungere la cartella portable Node al PATH; mantenere NVM, gestire spazi nei percorsi. Verifica reale --version e test discovery passati.
+- [x] Build e 42 test launcher + 8 test Pi passati dopo modifica etichette/discovery.
+- [ ] Risolvere avvio: utente vede solo il terminale server, non quello interattivo Pi. Verificare readiness e apertura terminale; mostrare chiaramente attesa/errore. Non dichiarare risolto soltanto perche --version funziona.
+- [ ] Test reale harness Pi + Qwen: precedente tentativo ha restituito exit0 ma output vuoto; lettura fixture NON verificata. Indagare input/PTY e stato WSL, senza attribuire ancora una causa certa.
+- [ ] Semplificare Anteprima avvio e Configura Pi: il primo mostra parametri, il secondo prepara provider/API; configurazione gia automatica in Avvia. Rendere comprensibili o spostare le opzioni tecniche.
+- [ ] Default richiesti: Solo questo PC - chat locale; modello Qwen; LLM + Pi Agent; output massimo alto. Proposta comunicata:32768 output, distinto dal context (non100000 output di default).
+- [ ] Preset context dedicati Qwen: oltre100000 fino262144, niente preset300K non valido. Limite architetturale diverso dalla memoria realmente disponibile.
+- [ ] Aggiornare impostazioni salvate sul PC senza toccare IP/cartelle o interrompere sessioni; verificare migrazione/persistenza.
+- [ ] Ricompilare, verificare terminale Pi reale, aggiornare exe e hash, pubblicare GitHub. Collegamento Desktop esistente deve continuare a puntare all'exe aggiornato.
+
+Vincoli: non avviare DeepSeek e Qwen contemporaneamente durante le prove; non arrestare WSL o chat utente per test. Test HTTP/GPU precedenti Qwen riusciti non equivalgono a test dell'harness Pi.
+
+## Correzioni completate - 14 settembre 2026
+
+- [x] Pi trovato nella distribuzione Node portatile; PATH corretto per Pi e Node, versione0.85.1 verificata.
+- [x] Terminale Pi aperto subito, separato dal server; attesa API visibile ogni5secondi fino900secondi, errori conservati nella finestra. Eliminato passaggio fragile tramite Windows Terminal.
+- [x] Prova reale Pi+Qwen context8192: toolCall read, toolResult non in errore, risposta AIUTANTE_PI_READ_OK. Il precedente risultato vuoto e superato dalla prova con stdin controllato e stream JSON.
+- [x] Interfaccia Chat LLM / LLM + Pi Agent; Aiuto Pi e Dettagli avvio con spiegazione. Provider configurato automaticamente.
+- [x] Default Qwen, Pi Agent, SoloPC, output32768; preferenze locali migrate con backup, rete/cartelle preservate. Contesto iniziale100000; preset Qwen fino262144 senza300K.
+- [x] Build,42combinazioni offline (inclusi contesti Qwen>100K),8test provider e discovery portable/NVM con spazi passati.
+- [x] Exe e hash aggiornati, collegamento Desktop esistente valido.
+- [ ] Pubblicazione delle correzioni: commit/push immediatamente successivi a questo aggiornamento.
+
+Restano limiti di collaudo: nessuna nuova prova DeepSeek+Pi sulla GPU o pipeline fisica PC2; OCR inferenza con pesi ancora non testata. Non significa che siano stati collaudati tutti i modelli e tutte le dimensioni di contesto.
